@@ -287,7 +287,7 @@ sub action
         if ($cmdopts{d})
         {
             print " [Delete]";
-            unlink $f or warn "Failed to unlink file '$f': $!";
+            unlink $file or warn "Failed to unlink file '$file': $!";
         }
     }
     else

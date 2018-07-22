@@ -1,10 +1,13 @@
 #!/usr/bin/perl -w
 
+# Constants
+$VERSION = 3.5;
+
 sub usage 
 {
 print <<EOF
 
-Version 3.4 - 20180621
+Version $VERSION
 This was written by Vittorio Tracy vrt\@srclab.com and is free to use or modify
 
 ABOUT:
@@ -26,12 +29,13 @@ dedupe.pl [OPTIONS] sourcedir
    -f 	       only read files, skip directories (do not recurse)
    -v 	       verbose output 
    -l LISTFILE load a list of files with checksums instead or in addition to the sourcedir
-   -s 	       store files not found in list
+   -s 	       store files not found in list (non duplicates)
    -b 	       follow symbolic links when recursing (not recommended)
    TODO: -q    quick match, use filename and size only to match already seen files
    TODO: -p    prune empty directories in sourcedir (if previously not empty) 
    -e REGEX    exclude files/directories matching a regex pattern, ex: '\.svn\$', '\.old|\.bak'
    -a          do an accounting of files in the list not found during scan
+   -o          overwrite on move/copy if file with same name exists at destination (clobber)
 
   ACTIONS:
    -d          delete the duplicates found
@@ -58,7 +62,7 @@ my ($tLoaded, $tDirectories, $tFiles, $tInList, $tNew, $tMissing) = (0,0,0,0,0,0
 my @srcdir;
 
 # Input processing
-getopts('hafvdsbqe:l:m:c:', \%cmdopts);
+getopts('hafvdsobqe:l:m:c:', \%cmdopts);
 
 if ($cmdopts{h}) { &usage(); exit(0) } # Print usage and exit
 
@@ -85,7 +89,7 @@ for my $sdir (@srcdir)
     &scandir({ dir => $sdir, delete => $cmdopts{d}, recurse => $cmdopts{f} });
 }
 &storefilelist({ list => $cmdopts{l} }) if ($cmdopts{s});
-&showmissing() if ($cmdopts{a});
+&missing() if ($cmdopts{a});
 &totals() if ($cmdopts{v});
 
 ## 
@@ -158,7 +162,6 @@ sub loadfilelist
 # and use that metadata to determine if the file is a duplicate. If the file is a
 # duplicate, carry out the action desired.
 # TODO: break out comparision operations into a separate subroutine
-# TODO: break out action operations into separate subroutine
 sub scandir
 {
     my $opts = shift;
@@ -241,6 +244,7 @@ sub scandir
 
         binmode(FILE);
         my $md5 = Digest::MD5->new->addfile(*FILE)->hexdigest;
+        my $isdupe = 0;
         if (defined $md5map{$md5}) # file is a duplicate
         {
             if ($md5map{$md5}{stored})
@@ -253,12 +257,7 @@ sub scandir
                 print " [New-Duplicate]" if ($cmdopts{v});
             }
 
-            if ($cmdopts{d})
-            {
-                print " [Delete]";
-                unlink $f or warn "Failed to unlink file '$f': $!";
-            }
-            print "\n";
+            $isdupe = 1; 
             $tInList++;
         }
         else # file is not a duplicate
@@ -269,27 +268,74 @@ sub scandir
             $md5map{$md5}{origname} = '';
             $md5map{$md5}{size} = (stat($f))[7];
             $md5map{$md5}{modified} = (stat(_))[9];
-            print " [New]\n" if ($cmdopts{v});
+            print " [New]" if ($cmdopts{v});
             $tNew++;
-
-            if ($cmdopts{c}) {
-                my ($ftmp) = $f =~ /([^\/]+)$/;
-                my $cfile = $cmdopts{c} . $ftmp;
-                #print "DEBUG: copying '$f' to '$cfile'\n";
-                copy($f, $cfile) or warn "Failed to copy file '$f' to '$cmdopts{c}': $!";
-            }
-            if ($cmdopts{m}) {
-                my ($ftmp) = $f =~ /([^\/]+)$/;
-                my $mfile = $cmdopts{m} . $ftmp;
-                #print "DEBUG: moving '$f' to '$mfile'\n";
-                move($f, $mfile) or warn "Failed to move file '$f' to '$cmdopts{m}': $!";
-            }
         }
+
+        &action($f, $isdupe);
+        print "\n";
     }
 }
 
+# Run desired action against duplicate or nonduplicate file found during scan
+sub action
+{
+    my ($file, $isdupe) = @_;
+
+    if ($isdupe)
+    {
+        if ($cmdopts{d})
+        {
+            print " [Delete]";
+            unlink $f or warn "Failed to unlink file '$f': $!";
+        }
+    }
+    else
+    {
+        if ($cmdopts{c})
+        {
+            my ($ftmp) = $file =~ /([^\/]+)$/;
+            my $cfile = $cmdopts{c} . $ftmp;
+            $cfile = &unique($cfile) if not ($cmdopts{o});
+            #print "DEBUG: copying '$file' to '$cfile'\n";
+            print " [Copy]";
+            copy($file, $cfile) or warn "Failed to copy file '$file' to '$cmdopts{c}': $!";
+        }
+        if ($cmdopts{m})
+        {
+            my ($ftmp) = $file =~ /([^\/]+)$/;
+            my $mfile = $cmdopts{m} . $ftmp;
+            $mfile = &unique($mfile) if not ($cmdopts{o});
+            #print "DEBUG: moving '$file' to '$mfile'\n";
+            print " [Move]";
+            move($file, $mfile) or warn "Failed to move file '$file' to '$cmdopts{m}': $!";
+        }
+    }
+} 
+
+# Check that file with same name doesn't already exist in destination, 
+# rename if one does (do not clobber)
+sub unique
+{
+    my $dfile = shift;
+    if (-e $dfile) {
+        if ($dfile =~ /^(.*)\.(\d+)$/)
+        {
+            $dfile = $1 . '.' . ($2 + 1);
+        }
+        else 
+        { 
+            $dfile = $dfile . '.1';
+        }
+
+        $dfile = &unique($dfile);
+    }
+
+    return $dfile
+}
+
 # List files seen previosly but not found during the current scan.
-sub showmissing
+sub missing
 {
    print "\nFiles in the list not found during the scan:\n" if ($cmdopts{v});
    foreach my $md5 (keys %md5map)

@@ -8,12 +8,15 @@ sub usage
 print <<EOF
 
 Version $VERSION
-This was written by Vittorio Tracy vrt\@srclab.com and is free to use or modify
+This was written by Vittorio Tracy vrt\@srclab.com, free to be used under 
+the terms of the MIT license.
+
 
 ABOUT:
 This script will compare the files in one or two directories to identify
 duplicates and optionally operate on them. Files are compared by MD5 checksum.
 Previously seen files can be stored in a text file for use in future comparisons.
+Empty files are ignored.
 
 The duplicates found can be deleted, or just displayed.
 The destination directory is optional, but if supplied, the files in source
@@ -21,8 +24,11 @@ directory will be compared against the destination directory and the
 non-duplicate files can be copied or moved into the destination directory,
 effectively merging the directories together.
 
+I use this script to manage my personal media, keeping track of which files I have copied from my camera or phone, even if I have deleted some because they were blurry.
+
+
 USAGE:
-dedupe.pl [OPTIONS] sourcedir
+  dedupe.pl [OPTIONS] sourcedir [sourcedir ..]
 
   OPTIONS:
    -h          help, print this usage information and exit
@@ -33,7 +39,7 @@ dedupe.pl [OPTIONS] sourcedir
    -b 	       follow symbolic links when recursing (not recommended)
    TODO: -q    quick match, use filename and size only to match already seen files
    TODO: -p    prune empty directories in sourcedir (if previously not empty) 
-   -e REGEX    exclude files/directories matching a regex pattern, ex: '\.svn\$', '\.old|\.bak'
+   -e REGEX    exclude files/directories matching a regex, ex: '\.svn\$', '\.old|\.bak'
    -a          do an accounting of files in the list not found during scan
    -o          overwrite on move/copy if file with same name exists at destination (clobber)
 
@@ -42,10 +48,52 @@ dedupe.pl [OPTIONS] sourcedir
    -c DESTDIR  copy the non duplicate files to the destination directory
    -m DESTDIR  move the non duplicate files to the destination directory
 
+
+LEGEND:
+    
+  In verbose mode each file found is listed with one or more of the following tags. The
+  tags shown depend on whether the file match the checksum of a previosly seen file. The
+  tag meaning is described for each below.
+
+  CHECKSUM MATCH:
+      [In-List]        The file checksum matches a file listed in the filelist.
+      [New-Duplicate]  The file checksum is not in the filelist but has been seen.
+      [Delete]         The file has been deleted.
+
+  NO CHECKSUM MATCH:
+      [New]            The file checksum is not in the filelist. 
+      [Name-Duplicate] The file name is already in the filelist. 
+      [Copy]           The file has been copied.
+      [Move]           The file has been moved.
+
+
+EXAMPLES:
+
+Compare files in two directories testdir1 and testdir2 without using a filelist.
+$ ./dedupe.pl -v testdir1/ testdir2
+
+When using a filelist, if one doesn't already exist you must create one.
+$ touch filelist.tsv
+
+Scan a directory, testdir1, storing checksums in the filelist specified.
+$ ./dedupe.pl -vs -l filelist.tsv testdir1/ 
+
+Compare the files in a directory, testdir2, with the files previously seen and recorded in the filelist, filelist.tsv.
+$ ./dedupe.pl -v -l filelist.tsv testdir2
+
+Compare the files in a directory, testdir2, with the files previously seen and recorded in the filelist, filelist.tsv, and store new file checksums in the filelist. Also specified was the copy action option to copy non-duplicate files to the directory, nondupes.
+$ mkdir nondupes
+$ ./dedupe.pl -vs -l filelist.tsv -c nondupes/ testdir2/
+
+Here is the result of the copy action.
+$ ls nondupes/
+hello  newfilehere
+
+
 TODO:
   - Add multiprocessing support to speed up scans.
-  - Support some other list storage formats or methods (SQL DB for example to reduce memory 
-    use and support larger file lists).
+  - Support some other list storage formats or methods (SQL DB for example to reduce
+    memory use and support larger file lists).
 
 EOF
 }
@@ -57,6 +105,7 @@ use File::Copy;
 
 # Global variabls
 my %md5map;
+my %namemap;
 my %cmdopts;
 my ($tLoaded, $tDirectories, $tFiles, $tInList, $tNew, $tMissing) = (0,0,0,0,0,0);
 my @srcdir;
@@ -153,6 +202,7 @@ sub loadfilelist
                            path => $path,
                            name => $filename,
                            stored => 1 };
+      $namemap{$filename}{$chksum} = $path if ($cmdopts{v});
    }
    $tLoaded = scalar keys(%md5map);
    print "Loaded $tLoaded files from list\n" if ($cmdopts{v}); 
@@ -240,7 +290,7 @@ sub scandir
         }
 
         $tFiles++;
-        print "   Calculating checksum for file: '$f':" if ($cmdopts{v});
+        print "   Found file: '$f':" if ($cmdopts{v});
 
         binmode(FILE);
         my $md5 = Digest::MD5->new->addfile(*FILE)->hexdigest;
@@ -270,10 +320,14 @@ sub scandir
             $md5map{$md5}{modified} = (stat(_))[9];
             print " [New]" if ($cmdopts{v});
             $tNew++;
+
+            print " [Name-Duplicate]" if ($cmdopts{v} and defined $namemap{$_} and 
+                                          not defined $namemap{$_}{$md5});
+            $namemap{$_}{$md5} = $md5map{$md5}{path};
         }
 
         &action($f, $isdupe);
-        print "\n";
+        print "\n" if ($cmdopts{v})
     }
 }
 

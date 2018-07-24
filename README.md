@@ -43,14 +43,21 @@ I use this script to manage my personal media, keeping track of which files I ha
   tag meaning is described for each below.
 
 ## CHECKSUM MATCH:
+
 **[In-List]**        The file checksum matches a file listed in the filelist.
+
 **[New-Duplicate]**  The file checksum is not in the filelist but has been seen.
+
 **[Delete]**         The file has been deleted.
 
 ## NO CHECKSUM MATCH:
+
 **[New]**            The file checksum is not in the filelist. 
+
 **[Name-Duplicate]** The file name is already in the filelist. 
+
 **[Copy]**           The file has been copied.
+
 **[Move]**           The file has been moved.
 
 

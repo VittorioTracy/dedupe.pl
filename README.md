@@ -42,16 +42,16 @@ I use this script to manage my personal media, keeping track of which files I ha
   tags shown depend on whether the file match the checksum of a previosly seen file. The
   tag meaning is described for each below.
 
-# CHECKSUM MATCH:
-  **[In-List]**        The file checksum matches a file listed in the filelist.
-  **[New-Duplicate]**  The file checksum is not in the filelist but has been seen.
-  **[Delete]**         The file has been deleted.
+## CHECKSUM MATCH:
+**[In-List]**        The file checksum matches a file listed in the filelist.
+**[New-Duplicate]**  The file checksum is not in the filelist but has been seen.
+**[Delete]**         The file has been deleted.
 
-# NO CHECKSUM MATCH:
-  **[New]**            The file checksum is not in the filelist. 
-  **[Name-Duplicate]** The file name is already in the filelist. 
-  **[Copy]**           The file has been copied.
-  **[Move]**           The file has been moved.
+## NO CHECKSUM MATCH:
+**[New]**            The file checksum is not in the filelist. 
+**[Name-Duplicate]** The file name is already in the filelist. 
+**[Copy]**           The file has been copied.
+**[Move]**           The file has been moved.
 
 
 # EXAMPLES:
@@ -78,9 +78,11 @@ Compare files in two directories testdir1 and testdir2 without using a filelist.
 
 ## Example 2
 When using a filelist, if one doesn't already exist you must create one.
+    
     $ touch filelist.tsv
 
 Scan a directory, testdir1, storing checksums in the filelist specified.
+    
     $ ./dedupe.pl -vs -l filelist.tsv testdir1/ 
     Loaded 0 files from list
     Scanning directory 'testdir1'
@@ -97,6 +99,7 @@ Scan a directory, testdir1, storing checksums in the filelist specified.
 
 ## Example 3
 Compair the files in a directory, testdir2, with the files previously seen and recorded in the filelist, filelist.tsv.
+    
     $ ./dedupe.pl -v -l filelist.tsv testdir2
     Loaded 3 files from list
     Scanning directory 'testdir2'
@@ -112,6 +115,7 @@ Compair the files in a directory, testdir2, with the files previously seen and r
 
 ## Example 4
 Compare the files in a directory, testdir2, with the files previously seen and recorded in the filelist, filelist.tsv, and store new file checksums in the filelist. Also specified was the copy action option to copy non-duplicate files to the directory, nondupes.
+    
     $ mkdir nondupes
     $ ./dedupe.pl -vs -l filelist.tsv -c nondupes/ testdir2/
     Loaded 3 files from list
@@ -126,6 +130,6 @@ Compare the files in a directory, testdir2, with the files previously seen and r
     Files found already in the list:     1
     New files found:                     2
 Here is the result of the copy action.
+    
     $ ls nondupes/
     hello  newfilehere
-
